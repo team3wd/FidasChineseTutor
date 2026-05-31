@@ -311,7 +311,7 @@ export default function Home() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span style={{ fontSize: '14px', fontWeight: 600 }}>Sign in to sync progress</span>
-            <button onClick={() => { setShowLoginPanel(false); setLoginSent(false); setLoginError(null); }}>
+            <button aria-label="Close" onClick={() => { setShowLoginPanel(false); setLoginSent(false); setLoginError(null); }}>
               <X size={14} style={{ color: 'var(--text-muted)' }} />
             </button>
           </div>
