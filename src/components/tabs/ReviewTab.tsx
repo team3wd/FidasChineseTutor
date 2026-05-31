@@ -64,7 +64,10 @@ export default function ReviewTab({
     onSave(updatedLessons, updatedVocab, updatedProgress);
 
     store[dateStr].items = store[dateStr].items.filter(i => i.id !== itemId);
-    if (store[dateStr].items.length === 0) delete store[dateStr];
+    if (store[dateStr].items.length === 0) {
+      delete store[dateStr];
+      setReviewLesson(null);
+    }
     savePending(store);
     onPendingUpdate({ ...store });
   };
@@ -76,6 +79,13 @@ export default function ReviewTab({
     // Snapshot item IDs since approving mutates the store
     const ids = lesson.items.map(i => i.id);
     ids.forEach(id => approvePendingItem(dateStr, id));
+    // If there were 0 items the loop never ran, so clean up the empty lesson entry manually
+    if (ids.length === 0) {
+      delete store[dateStr];
+      savePending(store);
+      onPendingUpdate({ ...store });
+    }
+    setReviewLesson(null);
   };
 
   const rejectPendingItem = (dateStr: string, itemId: string) => {
@@ -107,7 +117,7 @@ export default function ReviewTab({
     if (!lesson) return null;
 
     return (
-      <div className="animate-fade-in" style={{ padding: '16px 16px 80px 16px' }}>
+      <div className="animate-fade-in">
         <button
           onClick={() => { setReviewLesson(null); setEditingItem(null); }}
           style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -201,20 +211,21 @@ export default function ReviewTab({
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                    <button onClick={() => speakHanzi(item.hanzi)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', color: 'var(--text-secondary)' }}>
+                    <button aria-label="Pronounce" onClick={() => speakHanzi(item.hanzi)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', color: 'var(--text-secondary)' }}>
                       <Volume2 size={14} />
                     </button>
                     <button
+                      aria-label="Edit"
                       onClick={() => { setEditingItem(item.id); setEditHanzi(item.hanzi); setEditPinyin(item.pinyin); setEditTranslation(item.translation); }}
                       className="tap-active"
                       style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', color: 'var(--text-secondary)' }}
                     >
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => approvePendingItem(reviewLesson, item.id)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--success-subtle)', color: 'var(--success)' }}>
+                    <button aria-label="Approve" onClick={() => approvePendingItem(reviewLesson, item.id)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--success-subtle)', color: 'var(--success)' }}>
                       <Check size={14} />
                     </button>
-                    <button onClick={() => rejectPendingItem(reviewLesson, item.id)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--danger-subtle)', color: 'var(--danger)' }}>
+                    <button aria-label="Reject" onClick={() => rejectPendingItem(reviewLesson, item.id)} className="tap-active" style={{ padding: '7px', borderRadius: '50%', backgroundColor: 'var(--danger-subtle)', color: 'var(--danger)' }}>
                       <X size={14} />
                     </button>
                   </div>
@@ -228,7 +239,7 @@ export default function ReviewTab({
   }
 
   return (
-    <div className="animate-fade-in" style={{ padding: '16px 16px 80px 16px' }}>
+    <div className="animate-fade-in">
       <h2 style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '4px' }}>Review Queue</h2>
       <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
         AI-parsed words waiting for your approval before entering your study bank.

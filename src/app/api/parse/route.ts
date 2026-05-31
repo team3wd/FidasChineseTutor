@@ -1,7 +1,6 @@
-// Fetches the shared Google Doc, groups lines by lesson date, then uses Claude AI to
-// extract structured vocabulary (hanzi / pinyin / translation) from each lesson.
+// Fetches the shared Google Doc, groups lines by lesson date, then streams AI-parsed
+// vocabulary via SSE — one event per lesson so the client can save results incrementally.
 
-import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
@@ -128,89 +127,99 @@ async function parseWithClaude(
 // ── Route Handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  try {
-    const apiKey = process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'ANTHROPIC_API_KEY is not set in .env.local' },
-        { status: 400 }
-      );
-    }
-
-    let existingDates: string[] = [];
-    try {
-      const body = await request.json();
-      if (body && Array.isArray(body.existingDates)) existingDates = body.existingDates;
-    } catch (_) {}
-
-    // Fetch the public Google Doc
-    const docRes = await fetch(DOC_URL, { cache: 'no-store' });
-    if (!docRes.ok) {
-      return NextResponse.json(
-        { success: false, error: `Failed to fetch Google Doc: ${docRes.statusText}` },
-        { status: 502 }
-      );
-    }
-    const rawText = await docRes.text();
-
-    // Group lines by lesson date
-    const lessons = groupLinesByDate(rawText);
-    if (lessons.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'No lesson dates found in document.' },
-        { status: 422 }
-      );
-    }
-
-    // Skip already-processed lessons
-    const newLessons = lessons.filter((l) => !existingDates.includes(l.date));
-    if (newLessons.length === 0) {
-      return NextResponse.json({
-        success: true,
-        lessonsFound: lessons.length,
-        lessonsParsed: 0,
-        totalWords: 0,
-        lessons: {},
-        message: 'All lessons are already up to date!',
-      });
-    }
-
-    const client = new Anthropic({ apiKey });
-    const results: Record<string, { date: string; rawLineCount: number; items: (ParsedVocabItem & { id: string })[] }> = {};
-    const activeLessons = newLessons.filter((l) => l.lines.length > 0);
-
-    for (let i = 0; i < activeLessons.length; i++) {
-      const lesson = activeLessons[i];
-      const items = await parseWithClaude(client, lesson);
-
-      if (items.length > 0) {
-        results[lesson.date] = {
-          date: lesson.date,
-          rawLineCount: lesson.lines.length,
-          items: items.map((item, idx) => ({ ...item, id: `${lesson.date}_${idx}` })),
-        };
-      }
-
-      // Small pause between sequential lessons
-      if (i < activeLessons.length - 1) {
-        await new Promise((r) => setTimeout(r, 500));
-      }
-    }
-
-    const totalWords = Object.values(results).reduce((s, l) => s + l.items.length, 0);
-
-    return NextResponse.json({
-      success: true,
-      lessonsFound: lessons.length,
-      lessonsParsed: Object.keys(results).length,
-      totalWords,
-      lessons: results,
-    });
-  } catch (err: any) {
-    console.error('Parse route error:', err);
-    return NextResponse.json(
-      { success: false, error: err.message || 'Unexpected error during AI parsing.' },
-      { status: 500 }
+  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'ANTHROPIC_API_KEY is not set in .env.local' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
     );
   }
+
+  let existingDates: string[] = [];
+  try {
+    const body = await request.json();
+    if (body && Array.isArray(body.existingDates)) existingDates = body.existingDates;
+  } catch (_) {}
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (data: object) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch (_) {
+          // Client disconnected
+        }
+      };
+
+      try {
+        const docRes = await fetch(DOC_URL, { cache: 'no-store', signal: request.signal });
+        if (!docRes.ok) {
+          emit({ type: 'error', message: `Failed to fetch Google Doc: ${docRes.statusText}` });
+          controller.close();
+          return;
+        }
+        const rawText = await docRes.text();
+
+        const lessons = groupLinesByDate(rawText);
+        if (lessons.length === 0) {
+          emit({ type: 'error', message: 'No lesson dates found in document.' });
+          controller.close();
+          return;
+        }
+
+        const newLessons = lessons.filter((l) => !existingDates.includes(l.date));
+        if (newLessons.length === 0) {
+          emit({ type: 'done', lessonsParsed: 0, message: 'All lessons are already up to date!' });
+          controller.close();
+          return;
+        }
+
+        const activeLessons = newLessons.filter((l) => l.lines.length > 0);
+        emit({ type: 'start', total: activeLessons.length });
+
+        const client = new Anthropic({ apiKey });
+
+        for (let i = 0; i < activeLessons.length; i++) {
+          if (request.signal.aborted) break;
+
+          const lesson = activeLessons[i];
+          emit({ type: 'parsing', date: lesson.date, index: i + 1, total: activeLessons.length });
+
+          const items = await parseWithClaude(client, lesson);
+
+          emit({
+            type: 'lesson',
+            date: lesson.date,
+            rawLineCount: lesson.lines.length,
+            items: items.map((item, idx) => ({ ...item, id: `${lesson.date}_${idx}` })),
+          });
+
+          if (i < activeLessons.length - 1 && !request.signal.aborted) {
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+
+        emit({ type: 'done' });
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          emit({ type: 'error', message: err.message || 'Unexpected error during AI parsing.' });
+        }
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() {
+      // Client disconnected — the request.signal.aborted check in the loop handles cleanup
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
 }

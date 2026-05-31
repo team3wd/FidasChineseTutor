@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BookOpen, Layers, Gamepad2, BarChart3, RefreshCw, AlertCircle, X, ClipboardCheck } from 'lucide-react';
 import { Lesson, VocabItem, LocalStudyProgress } from '@/lib/types';
 import { loadPending, savePending, PendingStore, totalPendingCount } from '@/lib/pending';
@@ -31,6 +31,8 @@ export default function Home() {
   const [studyProgress, setStudyProgress] = useState<LocalStudyProgress>({});
   const [syncStatus, setSyncStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [appMode, setAppMode] = useState<'local' | 'supabase'>('local');
+  const [parseLog, setParseLog] = useState<{ date: string; status: 'parsing' | 'done'; words: number }[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -63,8 +65,12 @@ export default function Home() {
   };
 
   const handleSync = async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     setParsing(true);
     setSyncStatus(null);
+    setParseLog([]);
+
     try {
       const approvedDates = Array.from(new Set([
         ...lessons.map(l => l.date),
@@ -77,38 +83,82 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ existingDates }),
+        signal: controller.signal,
       });
 
-      if (!res.ok && res.headers.get('content-type')?.includes('application/json') === false) {
-        setSyncStatus({ success: false, message: `Server error ${res.status} — check terminal logs for details.` });
+      if (!res.ok || !res.body) {
+        const errData = await res.json().catch(() => ({}));
+        setSyncStatus({ success: false, message: errData.error || `Server error ${res.status}` });
         return;
       }
 
-      const data = await res.json();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let lessonsParsed = 0;
+      let streamDone = false;
 
-      if (data.success) {
-        if (data.lessonsParsed === 0) {
-          setSyncStatus({ success: true, message: data.message || 'All lessons are already up to date!' });
-          return;
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop()!;
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let event: any;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (event.type === 'parsing') {
+            setParseLog(prev => [...prev, { date: event.date, status: 'parsing', words: 0 }]);
+          } else if (event.type === 'lesson') {
+            const words = (event.items as any[]).length;
+            lessonsParsed++;
+            const current = loadPending();
+            current[event.date] = { date: event.date, rawLineCount: event.rawLineCount, items: event.items };
+            savePending(current);
+            setPendingStore({ ...current });
+            setParseLog(prev =>
+              prev.map(e => e.date === event.date ? { ...e, status: 'done', words } : e)
+            );
+          } else if (event.type === 'done') {
+            if (lessonsParsed === 0) {
+              setSyncStatus({ success: true, message: event.message || 'All lessons are already up to date!' });
+            } else {
+              const current = loadPending();
+              setSyncStatus({
+                success: true,
+                message: `AI parsed ${lessonsParsed} new lessons → ${totalPendingCount(current)} words ready for review!`,
+              });
+              setActiveTab('review');
+            }
+            streamDone = true;
+            break;
+          } else if (event.type === 'error') {
+            setSyncStatus({ success: false, message: event.message });
+            streamDone = true;
+            break;
+          }
         }
-        const current = loadPending();
-        Object.entries(data.lessons as Record<string, any>).forEach(([dateStr, lesson]: any) => {
-          current[dateStr] = { date: dateStr, rawLineCount: lesson.rawLineCount, items: lesson.items };
-        });
-        savePending(current);
-        setPendingStore({ ...current });
-        setSyncStatus({
-          success: true,
-          message: `AI parsed ${data.lessonsParsed} new lessons → ${totalPendingCount(current)} words ready for review!`,
-        });
-        setActiveTab('review');
-      } else {
-        setSyncStatus({ success: false, message: data.error || 'Parse failed.' });
       }
-    } catch {
-      setSyncStatus({ success: false, message: 'Network error during AI parse.' });
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        setSyncStatus({ success: false, message: 'Network error during AI parse.' });
+      } else {
+        const current = loadPending();
+        const count = totalPendingCount(current);
+        setSyncStatus({
+          success: count > 0,
+          message: count > 0
+            ? `Stopped — ${count} words saved. Sync again to continue where you left off.`
+            : 'Stopped before any lessons were saved.',
+        });
+      }
     } finally {
       setParsing(false);
+      abortRef.current = null;
     }
   };
 
@@ -139,19 +189,49 @@ export default function Home() {
           </span>
         </div>
         <button
-          onClick={handleSync}
-          disabled={parsing}
+          onClick={parsing ? () => abortRef.current?.abort() : handleSync}
           className="tap-active"
           style={{
             padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
-            backgroundColor: 'var(--bg-app)', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)', transition: 'all var(--transition-fast)'
+            backgroundColor: parsing ? 'var(--danger-subtle)' : 'var(--bg-app)',
+            display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '12px', fontWeight: 500,
+            color: parsing ? 'var(--danger)' : 'var(--text-primary)',
+            transition: 'all var(--transition-fast)'
           }}
         >
           <RefreshCw size={14} style={{ animation: parsing ? 'spin 1s linear infinite' : 'none' }} />
-          {parsing ? 'Parsing...' : 'Sync Doc'}
+          {parsing ? 'Stop' : 'Sync Doc'}
         </button>
       </header>
+
+      {parsing && (
+        <div style={{
+          margin: '12px 16px 0 16px', padding: '12px', borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)', fontSize: '12px',
+        }}>
+          <div style={{ fontWeight: 500, color: 'var(--text-secondary)', marginBottom: parseLog.length > 0 ? '8px' : 0 }}>
+            {parseLog.length === 0
+              ? 'Fetching Google Doc…'
+              : `Parsing lessons… (${parseLog.filter(e => e.status === 'done').length} / ${parseLog.length} done)`}
+          </div>
+          {parseLog.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', maxHeight: '140px', overflowY: 'auto' }}>
+              {parseLog.map(entry => (
+                <div key={entry.date} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '11px' }}>
+                  <span style={{ width: '12px', color: entry.status === 'done' ? 'var(--success)' : 'var(--text-muted)' }}>
+                    {entry.status === 'done' ? '✓' : '…'}
+                  </span>
+                  <span style={{ color: 'var(--text-primary)' }}>{entry.date}</span>
+                  {entry.status === 'done' && (
+                    <span style={{ color: 'var(--text-muted)' }}>— {entry.words} words</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {syncStatus && (
         <div style={{
@@ -189,15 +269,14 @@ export default function Home() {
         {activeTab === 'stats' && (
           <StatsTab vocabulary={vocabulary} studyProgress={studyProgress} />
         )}
+        {activeTab === 'review' && (
+          <ReviewTab
+            pendingStore={pendingStore} onPendingUpdate={setPendingStore}
+            lessons={lessons} vocabulary={vocabulary}
+            studyProgress={studyProgress} onSave={saveLocalData} speakHanzi={speakHanzi}
+          />
+        )}
       </main>
-
-      {activeTab === 'review' && (
-        <ReviewTab
-          pendingStore={pendingStore} onPendingUpdate={setPendingStore}
-          lessons={lessons} vocabulary={vocabulary}
-          studyProgress={studyProgress} onSave={saveLocalData} speakHanzi={speakHanzi}
-        />
-      )}
 
       <nav style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: '480px', margin: '0 auto',
