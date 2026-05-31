@@ -1,5 +1,4 @@
-// Pending vocabulary review queue — stored in localStorage under 'ch_pending'
-// Words here have been AI-parsed but NOT yet approved into the study bank.
+// Pending vocab queue (localStorage key: ch_pending) — AI-parsed words awaiting user approval before entering the study bank
 
 export interface PendingVocabItem {
   id: string;           // Temp client-side ID (lessonDate_index)

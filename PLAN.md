@@ -13,14 +13,14 @@
 
 ---
 
-### M1 — Cleanup & Stabilise 🔧 next
+### M1 — Cleanup & Stabilise ✅ done
 Goal: make the codebase honest about what it is before adding anything new.
 
-- [ ] Delete `/api/sync` — legacy regex parser, fully superseded by `/api/parse` + Gemini
-- [ ] Create `src/lib/types.ts` — single source of truth for shared types (`VocabItem`, `Lesson`, `SRSState`, etc.)
-- [ ] Split `page.tsx` into focused tab components (`LessonsTab`, `FlashcardsTab`, `PracticeTab`, `StatsTab`, `ReviewTab`)
-- [ ] Add `.env.local.example` so onboarding is self-documenting
-- [ ] Audit and document localStorage keys (what each stores, when cleared)
+- [x] Delete `/api/sync` — legacy regex parser, fully superseded by `/api/parse` + Gemini
+- [x] Create `src/lib/types.ts` — single source of truth for shared types (`VocabItem`, `Lesson`, `LocalStudyProgress`, etc.)
+- [x] Split `page.tsx` into focused tab components (`LessonsTab`, `FlashcardsTab`, `PracticeTab`, `StatsTab`, `ReviewTab`) under `src/components/tabs/`
+- [x] Add `.env.local.example` so onboarding is self-documenting
+- [x] localStorage keys documented in `src/app/page.tsx` header comment
 
 ---
 

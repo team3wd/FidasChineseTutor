@@ -1,4 +1,4 @@
-// SuperMemo-2 (SM-2) Algorithm Helper for Spaced Repetition System (SRS)
+// SM-2 spaced repetition algorithm — calculates next review interval and ease factor after each card grade
 
 export interface SRSState {
   interval: number;      // Days until next review
