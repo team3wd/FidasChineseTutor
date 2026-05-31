@@ -70,7 +70,7 @@ export default function StatsTab({ vocabulary, studyProgress }: Props) {
     };
 
     loadScenarios();
-  }, [vocabulary.length, studyProgress]); // Re-run when vocab or progress changes
+  }, [vocabulary.length]); // Re-run when vocab count changes
 
   const newCount = vocabulary.filter(v => !studyProgress[v.hanzi] || studyProgress[v.hanzi].status === 'NEW').length;
   const learningCount = vocabulary.filter(v => studyProgress[v.hanzi]?.status === 'LEARNING').length;
