@@ -1,3 +1,4 @@
+// Supabase admin client — uses service role key, server-only, never import in client components
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';

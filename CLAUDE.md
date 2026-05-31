@@ -19,7 +19,7 @@ This app:
 | Layer     | Choice                    |
 |-----------|---------------------------|
 | Framework | Next.js 16 (App Router)   |
-| AI        | Google Gemini 2.0 Flash   |
+| AI        | Claude Haiku 4.5 (Anthropic) |
 | Database  | Supabase (Postgres + RLS) |
 | Auth      | Supabase Auth (planned)   |
 | Styling   | Tailwind CSS              |
@@ -34,7 +34,7 @@ This app:
 ## Key Files
 
 - `src/app/page.tsx` — entire frontend (tabs: Lessons / Flashcards / Practice / Stats / Review)
-- `src/app/api/parse/route.ts` — fetches Google Doc → Gemini AI → returns pending vocab for review
+- `src/app/api/parse/route.ts` — fetches Google Doc → Claude Haiku 4.5 → returns pending vocab for review
 - `src/app/api/sync/route.ts` — legacy regex-based parser (superseded by /api/parse, to be removed in M1)
 - `src/lib/srs.ts` — SM-2 spaced repetition algorithm
 - `src/lib/pending.ts` — localStorage queue for AI-parsed vocab awaiting user approval
@@ -50,12 +50,19 @@ This app:
 - Shared types between client and server live in `src/lib/types.ts`
 - One feature branch per milestone; only merge to main when the milestone works end-to-end
 
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. **Never use `mcp__claude-in-chrome__*` tools directly.**
+
+Available gstack skills:
+`/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/setup-gbrain`, `/retro`, `/investigate`, `/document-release`, `/document-generate`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`, `/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`
+
 ## Environment Variables
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-GEMINI_API_KEY=
+ANTHROPIC_API_KEY=
 NEXT_PUBLIC_GOOGLE_DOC_SYNC_URL=   # optional, overrides the hardcoded Google Doc URL
 ```
