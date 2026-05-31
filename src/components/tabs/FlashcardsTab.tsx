@@ -11,7 +11,7 @@ interface Props {
   vocabulary: VocabItem[];
   lessons: Lesson[];
   studyProgress: LocalStudyProgress;
-  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress) => void;
+  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress, changedHanzi?: string) => void;
   speakHanzi: (hanzi: string) => void;
 }
 
@@ -78,7 +78,7 @@ export default function FlashcardsTab({ vocabulary, lessons, studyProgress, onSa
       localStorage.setItem('ch_study_dates', JSON.stringify(studyDates));
     }
 
-    onSave(lessons, vocabulary, updatedProgress);
+    onSave(lessons, vocabulary, updatedProgress, currentWord.hanzi);
     setIsFlipped(false);
     setTimeout(() => {
       if (currentQueueIndex + 1 < reviewQueue.length) {

@@ -13,7 +13,7 @@ interface Props {
   lessons: Lesson[];
   vocabulary: VocabItem[];
   studyProgress: LocalStudyProgress;
-  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress) => void;
+  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress, changedHanzi?: string) => void;
   speakHanzi: (hanzi: string) => void;
 }
 
@@ -76,15 +76,35 @@ export default function ReviewTab({
     const store = loadPending();
     const lesson = store[dateStr];
     if (!lesson) return;
-    // Snapshot item IDs since approving mutates the store
-    const ids = lesson.items.map(i => i.id);
-    ids.forEach(id => approvePendingItem(dateStr, id));
-    // If there were 0 items the loop never ran, so clean up the empty lesson entry manually
-    if (ids.length === 0) {
-      delete store[dateStr];
-      savePending(store);
-      onPendingUpdate({ ...store });
+
+    const lessonId = `l_${dateStr}`;
+    let updatedLessons = [...lessons];
+    if (!updatedLessons.find(l => l.id === lessonId)) {
+      updatedLessons.unshift({ id: lessonId, date: dateStr, context_text: '' });
+      updatedLessons.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
+
+    // Accumulate all items in one pass so each item sees the full running vocab list
+    let updatedVocab = [...vocabulary];
+    const updatedProgress = { ...studyProgress };
+
+    for (const item of lesson.items) {
+      if (!updatedVocab.find(v => v.hanzi === item.hanzi && v.lesson_id === lessonId)) {
+        updatedVocab.push({ id: `v_${item.id}`, lesson_id: lessonId, hanzi: item.hanzi, pinyin: item.pinyin, translation: item.translation });
+      }
+      if (!updatedProgress[item.hanzi]) {
+        updatedProgress[item.hanzi] = {
+          interval: 0, easeFactor: 2.5, repetitions: 0,
+          nextReview: new Date().toISOString(), status: 'NEW', incorrect_count: 0,
+        };
+      }
+    }
+
+    onSave(updatedLessons, updatedVocab, updatedProgress);
+
+    delete store[dateStr];
+    savePending(store);
+    onPendingUpdate({ ...store });
     setReviewLesson(null);
   };
 

@@ -27,11 +27,11 @@ Goal: make the codebase honest about what it is before adding anything new.
 ### M2 — Supabase Sync for Study Progress
 Goal: SRS progress survives clearing localStorage; works across devices.
 
-- [ ] Add Supabase Auth (magic link email — simplest, no OAuth app setup needed)
-- [ ] On login: load `study_progress` from Supabase instead of localStorage
-- [ ] On card review: upsert `study_progress` row in Supabase
-- [ ] Offline fallback: write to localStorage, sync on reconnect
-- [ ] Show logged-in user in UI with logout option
+- [x] Add Supabase Auth (magic link email — simplest, no OAuth app setup needed)
+- [x] On login: load `study_progress` from Supabase instead of localStorage
+- [x] On card review: upsert `study_progress` row in Supabase
+- [ ] ~~Offline fallback: write to localStorage, sync on reconnect~~ — DEFERRED: localStorage is written first and sync happens on login; explicit `online` event listener not implemented (low impact for single-user use case)
+- [x] Show logged-in user in UI with logout option
 
 ---
 
