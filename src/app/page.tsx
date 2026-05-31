@@ -2,10 +2,13 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Layers, Gamepad2, BarChart3, RefreshCw, AlertCircle, X, ClipboardCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BookOpen, Layers, Gamepad2, BarChart3, RefreshCw, AlertCircle, X, ClipboardCheck, LogOut, User } from 'lucide-react';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Lesson, VocabItem, LocalStudyProgress } from '@/lib/types';
 import { loadPending, savePending, PendingStore, totalPendingCount } from '@/lib/pending';
+import { supabase } from '@/lib/supabase';
+import { loadProgressFromSupabase, upsertProgressEntry, syncLocalToSupabase } from '@/lib/progressSync';
 import LessonsTab from '@/components/tabs/LessonsTab';
 import FlashcardsTab from '@/components/tabs/FlashcardsTab';
 import PracticeTab from '@/components/tabs/PracticeTab';
@@ -34,6 +37,16 @@ export default function Home() {
   const [parseLog, setParseLog] = useState<{ date: string; status: 'parsing' | 'done'; words: number }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Auth state
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginSent, setLoginSent] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [showLoginPanel, setShowLoginPanel] = useState(false);
+
+  // Load local data on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedLessons = localStorage.getItem('ch_lessons');
@@ -47,14 +60,56 @@ export default function Home() {
     setPendingStore(loadPending());
   }, []);
 
-  const saveLocalData = (newLessons: Lesson[], newVocab: VocabItem[], newProgress: LocalStudyProgress) => {
+  // Subscribe to Supabase auth state
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // On login: load progress from Supabase and merge with local
+  useEffect(() => {
+    if (!user) return;
+
+    setAppMode('supabase');
+    localStorage.setItem('ch_mode', 'supabase');
+
+    (async () => {
+      const localRaw = localStorage.getItem('ch_progress');
+      const localProgress: LocalStudyProgress = localRaw ? JSON.parse(localRaw) : {};
+      const remoteProgress = await loadProgressFromSupabase(user.id);
+      const merged = await syncLocalToSupabase(user.id, localProgress, remoteProgress);
+      setStudyProgress(merged);
+      localStorage.setItem('ch_progress', JSON.stringify(merged));
+    })();
+  }, [user]);
+
+  const saveLocalData = useCallback((
+    newLessons: Lesson[],
+    newVocab: VocabItem[],
+    newProgress: LocalStudyProgress,
+    changedHanzi?: string
+  ) => {
     setLessons(newLessons);
     setVocabulary(newVocab);
     setStudyProgress(newProgress);
     localStorage.setItem('ch_lessons', JSON.stringify(newLessons));
     localStorage.setItem('ch_vocabulary', JSON.stringify(newVocab));
     localStorage.setItem('ch_progress', JSON.stringify(newProgress));
-  };
+
+    // Sync the changed entry to Supabase if logged in
+    if (user && changedHanzi && newProgress[changedHanzi]) {
+      upsertProgressEntry(user.id, changedHanzi, newProgress[changedHanzi]);
+    }
+  }, [user]);
 
   const speakHanzi = (hanzi: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -162,6 +217,29 @@ export default function Home() {
     }
   };
 
+  const handleSendMagicLink = async () => {
+    if (!loginEmail.trim()) return;
+    setLoginLoading(true);
+    setLoginError(null);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: loginEmail.trim(),
+      options: { emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+    });
+    setLoginLoading(false);
+    if (error) {
+      setLoginError(error.message);
+    } else {
+      setLoginSent(true);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setAppMode('local');
+    localStorage.setItem('ch_mode', 'local');
+    setShowLoginPanel(false);
+  };
+
   const tabNavItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'lessons', label: 'Lessons', icon: <BookOpen size={18} /> },
     { id: 'flashcards', label: 'Flashcards', icon: <Layers size={18} /> },
@@ -185,25 +263,101 @@ export default function Home() {
             Chinese Study Companion
           </h1>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
-            {appMode === 'local' ? 'Guest Mode (Browser Storage)' : 'Cloud Mode (Supabase)'}
+            {authLoading ? 'Loading…' : user ? `Synced · ${user.email}` : 'Guest Mode (Browser Storage)'}
           </span>
         </div>
-        <button
-          onClick={parsing ? () => abortRef.current?.abort() : handleSync}
-          className="tap-active"
-          style={{
-            padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
-            backgroundColor: parsing ? 'var(--danger-subtle)' : 'var(--bg-app)',
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '12px', fontWeight: 500,
-            color: parsing ? 'var(--danger)' : 'var(--text-primary)',
-            transition: 'all var(--transition-fast)'
-          }}
-        >
-          <RefreshCw size={14} style={{ animation: parsing ? 'spin 1s linear infinite' : 'none' }} />
-          {parsing ? 'Stop' : 'Sync Doc'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* Auth button */}
+          {!authLoading && (
+            <button
+              onClick={() => user ? handleLogout() : setShowLoginPanel(v => !v)}
+              className="tap-active"
+              style={{
+                padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-app)', display: 'flex', alignItems: 'center', gap: '5px',
+                fontSize: '12px', fontWeight: 500, color: user ? 'var(--text-secondary)' : 'var(--primary)',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              {user ? <LogOut size={13} /> : <User size={13} />}
+              {user ? 'Sign out' : 'Sign in'}
+            </button>
+          )}
+          {/* Sync button */}
+          <button
+            onClick={parsing ? () => abortRef.current?.abort() : handleSync}
+            className="tap-active"
+            style={{
+              padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+              backgroundColor: parsing ? 'var(--danger-subtle)' : 'var(--bg-app)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', fontWeight: 500,
+              color: parsing ? 'var(--danger)' : 'var(--text-primary)',
+              transition: 'all var(--transition-fast)'
+            }}
+          >
+            <RefreshCw size={14} style={{ animation: parsing ? 'spin 1s linear infinite' : 'none' }} />
+            {parsing ? 'Stop' : 'Sync Doc'}
+          </button>
+        </div>
       </header>
+
+      {/* Login panel */}
+      {showLoginPanel && !user && (
+        <div style={{
+          margin: '12px 16px 0 16px', padding: '16px', borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)', backgroundColor: 'var(--bg-surface)',
+          animation: 'fadeIn var(--transition-fast) forwards'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600 }}>Sign in to sync progress</span>
+            <button onClick={() => { setShowLoginPanel(false); setLoginSent(false); setLoginError(null); }}>
+              <X size={14} style={{ color: 'var(--text-muted)' }} />
+            </button>
+          </div>
+          {loginSent ? (
+            <p style={{ fontSize: '13px', color: 'var(--success)', lineHeight: 1.5 }}>
+              Magic link sent! Check your email and click the link to sign in.
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                Enter your email. We'll send a one-click sign-in link — no password needed.
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={loginEmail}
+                  onChange={e => setLoginEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendMagicLink()}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border)', fontSize: '13px',
+                    backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', outline: 'none'
+                  }}
+                />
+                <button
+                  onClick={handleSendMagicLink}
+                  disabled={loginLoading || !loginEmail.trim()}
+                  className="tap-active"
+                  style={{
+                    padding: '8px 14px', borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--primary)', color: '#fff',
+                    fontSize: '12px', fontWeight: 600, border: 'none',
+                    opacity: loginLoading || !loginEmail.trim() ? 0.6 : 1
+                  }}
+                >
+                  {loginLoading ? '…' : 'Send'}
+                </button>
+              </div>
+              {loginError && (
+                <p style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{loginError}</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {parsing && (
         <div style={{

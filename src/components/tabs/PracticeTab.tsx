@@ -10,7 +10,7 @@ interface Props {
   vocabulary: VocabItem[];
   lessons: Lesson[];
   studyProgress: LocalStudyProgress;
-  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress) => void;
+  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress, changedHanzi?: string) => void;
   speakHanzi: (hanzi: string) => void;
 }
 
@@ -67,7 +67,7 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
       const updatedProgress = { ...studyProgress };
       if (updatedProgress[toneGameWord.hanzi]) {
         updatedProgress[toneGameWord.hanzi].incorrect_count += 1;
-        onSave(lessons, vocabulary, updatedProgress);
+        onSave(lessons, vocabulary, updatedProgress, toneGameWord.hanzi);
       }
     }
     setToneFeedback({ isCorrect, selected: toneNum });
@@ -81,7 +81,7 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
       const updatedProgress = { ...studyProgress };
       if (updatedProgress[mcWord.hanzi]) {
         updatedProgress[mcWord.hanzi].incorrect_count += 1;
-        onSave(lessons, vocabulary, updatedProgress);
+        onSave(lessons, vocabulary, updatedProgress, mcWord.hanzi);
       }
     }
     setMcFeedback({ isCorrect, selected: option });

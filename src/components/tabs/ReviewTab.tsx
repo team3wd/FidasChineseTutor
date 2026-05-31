@@ -13,7 +13,7 @@ interface Props {
   lessons: Lesson[];
   vocabulary: VocabItem[];
   studyProgress: LocalStudyProgress;
-  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress) => void;
+  onSave: (lessons: Lesson[], vocab: VocabItem[], progress: LocalStudyProgress, changedHanzi?: string) => void;
   speakHanzi: (hanzi: string) => void;
 }
 
