@@ -1,7 +1,9 @@
-// Fetches the shared Google Doc, groups lines by lesson date, then streams AI-parsed
-// vocabulary via SSE — one event per lesson so the client can save results incrementally.
+// Fetches the shared Google Doc, diffs against cached snapshot, then streams AI-parsed
+// vocabulary via SSE — Anthropic is only called for date sections not in the last snapshot.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { createHash } from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,20 +74,53 @@ function groupLinesByDate(text: string): LessonRaw[] {
   return lessons;
 }
 
+function hashText(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+// Returns the Supabase admin client, or null if env vars are not configured.
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+async function loadSnapshot(): Promise<{ hash: string; dates: Set<string> } | null> {
+  const admin = getAdminClient();
+  if (!admin) return null;
+
+  const { data } = await admin
+    .from('doc_snapshots')
+    .select('content, content_hash')
+    .order('fetched_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!data) return null;
+
+  const dates = new Set(groupLinesByDate(data.content).map((l) => l.date));
+  return { hash: data.content_hash, dates };
+}
+
+async function saveSnapshot(content: string, hash: string): Promise<void> {
+  const admin = getAdminClient();
+  if (!admin) return;
+  await admin.from('doc_snapshots').insert({ content, content_hash: hash });
+}
+
 async function parseWithClaude(
   client: Anthropic,
   lesson: LessonRaw
 ): Promise<ParsedVocabItem[]> {
   try {
     const response = await client.messages.create({
-      // Haiku 4.5: fast, cheap, and sufficient for structured extraction
       model: 'claude-haiku-4-5',
       max_tokens: 4096,
       system: [
         {
           type: 'text',
           text: PARSER_SYSTEM,
-          // Cache the system prompt — it's identical across all lesson parses
           cache_control: { type: 'ephemeral' },
         },
       ],
@@ -148,12 +183,11 @@ export async function POST(request: Request) {
       const emit = (data: object) => {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        } catch (_) {
-          // Client disconnected
-        }
+        } catch (_) {}
       };
 
       try {
+        // Step 1: fetch the doc
         const docRes = await fetch(DOC_URL, { cache: 'no-store', signal: request.signal });
         if (!docRes.ok) {
           emit({ type: 'error', message: `Failed to fetch Google Doc: ${docRes.statusText}` });
@@ -161,31 +195,50 @@ export async function POST(request: Request) {
           return;
         }
         const rawText = await docRes.text();
+        const currentHash = hashText(rawText);
 
-        const lessons = groupLinesByDate(rawText);
-        if (lessons.length === 0) {
+        // Step 2: load last snapshot and check if the doc changed
+        const snapshot = await loadSnapshot();
+
+        if (snapshot && snapshot.hash === currentHash) {
+          // Doc is identical to the last snapshot — nothing to parse
+          emit({ type: 'done', lessonsParsed: 0, message: 'Doc unchanged since last sync — already up to date!' });
+          controller.close();
+          return;
+        }
+
+        // Step 3: find lessons that are new (not in snapshot AND not already approved/pending)
+        const allLessons = groupLinesByDate(rawText);
+        if (allLessons.length === 0) {
           emit({ type: 'error', message: 'No lesson dates found in document.' });
           controller.close();
           return;
         }
 
-        const newLessons = lessons.filter((l) => !existingDates.includes(l.date));
+        const knownDates = new Set([
+          ...(snapshot?.dates ?? []),
+          ...existingDates,
+        ]);
+        const newLessons = allLessons
+          .filter((l) => !knownDates.has(l.date) && l.lines.length > 0);
+
         if (newLessons.length === 0) {
+          // Doc changed (e.g. formatting) but no new lesson dates — save snapshot and bail
+          await saveSnapshot(rawText, currentHash);
           emit({ type: 'done', lessonsParsed: 0, message: 'All lessons are already up to date!' });
           controller.close();
           return;
         }
 
-        const activeLessons = newLessons.filter((l) => l.lines.length > 0);
-        emit({ type: 'start', total: activeLessons.length });
-
+        // Step 4: parse only the new lessons
+        emit({ type: 'start', total: newLessons.length });
         const client = new Anthropic({ apiKey });
 
-        for (let i = 0; i < activeLessons.length; i++) {
+        for (let i = 0; i < newLessons.length; i++) {
           if (request.signal.aborted) break;
 
-          const lesson = activeLessons[i];
-          emit({ type: 'parsing', date: lesson.date, index: i + 1, total: activeLessons.length });
+          const lesson = newLessons[i];
+          emit({ type: 'parsing', date: lesson.date, index: i + 1, total: newLessons.length });
 
           const items = await parseWithClaude(client, lesson);
 
@@ -196,9 +249,14 @@ export async function POST(request: Request) {
             items: items.map((item, idx) => ({ ...item, id: `${lesson.date}_${idx}` })),
           });
 
-          if (i < activeLessons.length - 1 && !request.signal.aborted) {
+          if (i < newLessons.length - 1 && !request.signal.aborted) {
             await new Promise((r) => setTimeout(r, 500));
           }
+        }
+
+        // Step 5: save the new snapshot (only after successful parse)
+        if (!request.signal.aborted) {
+          await saveSnapshot(rawText, currentHash);
         }
 
         emit({ type: 'done' });
@@ -210,9 +268,7 @@ export async function POST(request: Request) {
         controller.close();
       }
     },
-    cancel() {
-      // Client disconnected — the request.signal.aborted check in the loop handles cleanup
-    },
+    cancel() {},
   });
 
   return new Response(stream, {
