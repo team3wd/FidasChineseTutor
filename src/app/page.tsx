@@ -78,6 +78,12 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ existingDates }),
       });
+
+      if (!res.ok && res.headers.get('content-type')?.includes('application/json') === false) {
+        setSyncStatus({ success: false, message: `Server error ${res.status} — check terminal logs for details.` });
+        return;
+      }
+
       const data = await res.json();
 
       if (data.success) {

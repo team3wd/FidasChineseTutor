@@ -69,8 +69,8 @@ Goal: shareable, stable, hosted.
 
 | Metric | Threshold | Action |
 |--------|-----------|--------|
-| Gemini API rate limit hits | Any occurrence in normal use | Evaluate switching parser to Claude API (Anthropic) |
-| Gemini API rate limit hits | Frequent / blocking usage | Switch to Claude API |
+| Claude Haiku parse quality | Consistently missing or wrong vocab items | Upgrade parser to Claude Sonnet 4.6 |
+| Claude API rate limit hits | Frequent / blocking usage | Review usage patterns; consider batching or caching |
 
 ---
 
@@ -83,4 +83,4 @@ Goal: shareable, stable, hosted.
 | 2026-05 | localStorage as primary store for now | Simpler to ship M0; Supabase progress sync is M2 |
 | 2026-05 | Magic link auth (not Google OAuth) for M2 | No OAuth app setup required; fits a single-user or small-group app |
 | 2026-05 | Google Doc set to "Anyone with link can view" | Simplest access method; content is non-sensitive vocab notes |
-| 2026-05 | Keep Gemini for now, revisit if rate limits hit | Gemini free tier sufficient for current usage; Claude API is an option if needed |
+| 2026-05 | Switch parser from Gemini to Claude Haiku 4.5 | Gemini free tier quota was fully exhausted (limit: 0); Claude Haiku is fast, cheap, and handles structured extraction well |

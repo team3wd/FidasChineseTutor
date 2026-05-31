@@ -19,7 +19,7 @@ This app:
 | Layer     | Choice                    |
 |-----------|---------------------------|
 | Framework | Next.js 16 (App Router)   |
-| AI        | Google Gemini 2.0 Flash   |
+| AI        | Claude Haiku 4.5 (Anthropic) |
 | Database  | Supabase (Postgres + RLS) |
 | Auth      | Supabase Auth (planned)   |
 | Styling   | Tailwind CSS              |
@@ -34,7 +34,7 @@ This app:
 ## Key Files
 
 - `src/app/page.tsx` — entire frontend (tabs: Lessons / Flashcards / Practice / Stats / Review)
-- `src/app/api/parse/route.ts` — fetches Google Doc → Gemini AI → returns pending vocab for review
+- `src/app/api/parse/route.ts` — fetches Google Doc → Claude Haiku 4.5 → returns pending vocab for review
 - `src/app/api/sync/route.ts` — legacy regex-based parser (superseded by /api/parse, to be removed in M1)
 - `src/lib/srs.ts` — SM-2 spaced repetition algorithm
 - `src/lib/pending.ts` — localStorage queue for AI-parsed vocab awaiting user approval
@@ -56,6 +56,6 @@ This app:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-GEMINI_API_KEY=
+ANTHROPIC_API_KEY=
 NEXT_PUBLIC_GOOGLE_DOC_SYNC_URL=   # optional, overrides the hardcoded Google Doc URL
 ```
