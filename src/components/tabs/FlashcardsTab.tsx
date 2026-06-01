@@ -116,7 +116,7 @@ export default function FlashcardsTab({ vocabulary, lessons, studyProgress, onSa
         </select>
       </div>
 
-      {reviewQueue.length === 0 ? (
+      {reviewQueue.length === 0 || !reviewQueue[currentQueueIndex] ? (
         <div style={{
           padding: '40px 20px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)',
           textAlign: 'center', backgroundColor: 'var(--bg-surface)', boxShadow: 'var(--shadow-sm)'

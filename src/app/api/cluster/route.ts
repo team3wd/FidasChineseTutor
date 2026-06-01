@@ -93,10 +93,16 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // Parse Claude's JSON response
+    // Parse Claude's JSON response — strip markdown fences if Claude wraps output
     let scenarios: ClusterScenario[];
     try {
-      scenarios = JSON.parse(textBlock.text);
+      const clean = textBlock.text
+        .trim()
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+      scenarios = JSON.parse(clean);
     } catch {
       console.error('Failed to parse cluster response:', textBlock.text);
       return Response.json(
