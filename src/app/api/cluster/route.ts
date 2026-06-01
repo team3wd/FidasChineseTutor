@@ -68,7 +68,11 @@ export async function POST(req: Request): Promise<Response> {
       .map((v) => `${v.hanzi} (${v.translation}) — interval: ${v.interval || 0}`)
       .join('\n');
 
-    const client = new Anthropic();
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
+      return Response.json({ error: 'ANTHROPIC_API_KEY is not set in .env.local' }, { status: 500 });
+    }
+    const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 2048,

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "bash -c 'set -a && . .env.local 2>/dev/null; set +a && next dev'",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
