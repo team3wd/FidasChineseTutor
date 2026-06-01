@@ -57,6 +57,20 @@ Use the `/browse` skill from gstack for all web browsing. **Never use `mcp__clau
 Available gstack skills:
 `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/setup-gbrain`, `/retro`, `/investigate`, `/document-release`, `/document-generate`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`, `/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`
 
+## Testing
+
+Two layers: **Vitest** for pure logic (`src/lib/*.ts`, API route handlers), **Playwright** for browser flows.
+
+- Run unit tests: `npx vitest run`
+- Run E2E tests: `npx playwright test`
+- Full reference: see [TESTING.md](TESTING.md)
+
+Expectations:
+- New functions → write a unit or E2E test covering each branch
+- Bug fixes → write a regression test before fixing
+- New API routes → test the handler directly in Vitest (mock `fetch` and the Anthropic SDK)
+- Never commit code that breaks existing tests
+
 ## Environment Variables
 
 ```

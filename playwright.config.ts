@@ -2,8 +2,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  // Where Playwright looks for test files
+  // Where Playwright looks for test files — *.spec.ts only (*.test.ts are Vitest unit tests)
   testDir: './tests',
+  testMatch: '**/*.spec.ts',
 
   // Run all tests in a file in parallel (each test gets its own browser context)
   fullyParallel: true,
