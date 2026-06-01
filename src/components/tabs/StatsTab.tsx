@@ -101,7 +101,10 @@ export default function StatsTab({ vocabulary, studyProgress }: Props) {
 
       if (!isClusterStale(vocabulary)) {
         const cache = getClusterCache();
-        if (cache) { setScenarios(cache.scenarios); return; }
+        // Reject cache entries that predate the words[] field (M4 addition)
+        if (cache && cache.scenarios.every(s => Array.isArray(s.words))) {
+          setScenarios(cache.scenarios); return;
+        }
       }
 
       setLoadingClusters(true);
@@ -231,7 +234,7 @@ export default function StatsTab({ vocabulary, studyProgress }: Props) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {scenarios.map(scenario => {
-                const topicHanzi = scenario.words.length > 0 ? scenario.words : scenario.sample_words;
+                const topicHanzi = scenario.words?.length > 0 ? scenario.words : scenario.sample_words;
                 const b = bucketWords(topicHanzi, studyProgress);
                 const masteredPct = b.total > 0 ? Math.round((b.mastered / b.total) * 100) : 0;
 
