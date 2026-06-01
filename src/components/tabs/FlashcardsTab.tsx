@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Volume2, Award } from 'lucide-react';
 import { VocabItem, Lesson, LocalStudyProgress } from '@/lib/types';
 import { calculateSRS, SRSState } from '@/lib/srs';
+import { recordReview } from '@/lib/cluster';
 
 interface Props {
   vocabulary: VocabItem[];
@@ -78,6 +79,7 @@ export default function FlashcardsTab({ vocabulary, lessons, studyProgress, onSa
       localStorage.setItem('ch_study_dates', JSON.stringify(studyDates));
     }
 
+    recordReview();
     onSave(lessons, vocabulary, updatedProgress, currentWord.hanzi);
     setIsFlipped(false);
     setTimeout(() => {

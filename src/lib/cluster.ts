@@ -6,6 +6,7 @@ export interface ClusterScenario {
   name: string;
   readiness_pct: number;
   sample_words: string[];
+  words: string[]; // all hanzi from input assigned to this topic
 }
 
 export interface ClusterCache {
@@ -92,4 +93,36 @@ export async function clusterVocab(vocab: VocabItem[], studyProgress: LocalStudy
 export function invalidateClusterCache() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(CACHE_KEY);
+}
+
+// ── Daily review tracking ──────────────────────────────────────────────────────
+
+const DAILY_REVIEWS_KEY = 'ch_daily_reviews';
+
+/** Increment today's review count by n (default 1). */
+export function recordReview(n = 1) {
+  if (typeof window === 'undefined') return;
+  const today = new Date().toDateString();
+  const counts: Record<string, number> = JSON.parse(
+    localStorage.getItem(DAILY_REVIEWS_KEY) || '{}'
+  );
+  counts[today] = (counts[today] || 0) + n;
+  localStorage.setItem(DAILY_REVIEWS_KEY, JSON.stringify(counts));
+}
+
+/** Returns { today, thisWeek } review counts. */
+export function getReviewCounts(): { today: number; thisWeek: number } {
+  if (typeof window === 'undefined') return { today: 0, thisWeek: 0 };
+  const counts: Record<string, number> = JSON.parse(
+    localStorage.getItem(DAILY_REVIEWS_KEY) || '{}'
+  );
+  const now = new Date();
+  let thisWeek = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    thisWeek += counts[d.toDateString()] || 0;
+  }
+  const today = counts[now.toDateString()] || 0;
+  return { today, thisWeek };
 }

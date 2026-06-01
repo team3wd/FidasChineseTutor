@@ -44,13 +44,14 @@ Goal: active recall beyond flashcards.
 
 ---
 
-### M4 — Stats Tab
+### M4 — Stats Tab ✅ done
 Goal: meaningful study metrics.
 
-- [ ] Daily/weekly cards reviewed
-- [ ] Mastery breakdown (NEW / LEARNING / REVIEW / MASTERED counts)
-- [ ] Study streak (consecutive days with at least one review)
-- [ ] Decide: compute client-side from progress data, or add a Postgres view
+- [x] Daily/weekly cards reviewed (tracked in `ch_daily_reviews` localStorage, shown as Reviews Today + This Week tiles)
+- [x] Mastery breakdown (NEW / LEARNING / REVIEW / MASTERED counts) — global mastery funnel with stacked bar
+- [x] Study streak (consecutive days with at least one review)
+- [x] Decided: compute client-side from progress data (no Postgres view needed)
+- [x] Per-topic mastery breakdown — cluster API extended to return full `words[]` per topic; StatsTab shows mastery bar + legend per cluster
 
 ---
 

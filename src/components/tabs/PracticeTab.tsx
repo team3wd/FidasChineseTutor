@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Check, X, AlertCircle } from 'lucide-react';
 import { VocabItem, Lesson, LocalStudyProgress } from '@/lib/types';
 import { calculateSRS, SRSState } from '@/lib/srs';
+import { recordReview } from '@/lib/cluster';
 
 interface Props {
   vocabulary: VocabItem[];
@@ -144,6 +145,7 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
       localStorage.setItem('ch_study_dates', JSON.stringify(studyDates));
     }
 
+    recordReview();
     onSave(lessons, vocabulary, updatedProgress, pinyinWord.hanzi);
     setPinyinFeedback({ isCorrect });
   };

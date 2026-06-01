@@ -21,6 +21,7 @@ interface ClusterScenario {
   name: string;
   readiness_pct: number;
   sample_words: string[];
+  words: string[]; // all hanzi from input that belong to this topic
 }
 
 interface ClusterResponse {
@@ -33,14 +34,15 @@ const CLUSTER_SYSTEM = `You are a Chinese language tutor assistant. Given a list
 
 Rules:
 1. Identify 5-8 realistic conversation scenarios (e.g. "Ordering food", "Making friends", "Describing emotions")
-2. For each scenario, estimate what fraction of the vocabulary needed for that conversation is present in the approved list
-3. Calculate readiness_pct as: (fraction_of_topic_words_present) × (average_interval_of_those_words / 30, capped at 1.0) × 100
+2. For each scenario, list ALL hanzi from the input that belong to that scenario in a "words" array
+3. Pick 2-3 representative hanzi from that list for "sample_words"
+4. Calculate readiness_pct as: (fraction_of_topic_words_present) × (average_interval_of_those_words / 30, capped at 1.0) × 100
    - Example: if 60% of "greeting" vocabulary is present with avg interval=20, readiness = 0.60 × (20/30) × 100 = 40%
-4. For each scenario, pick 2-3 representative sample words that are in the approved vocab
 5. Order scenarios by readiness_pct descending (most ready first)
+6. Every hanzi from the input must appear in at least one scenario's "words" array
 
 Return ONLY valid JSON array, no markdown fences or explanation:
-[{"name":"Scenario Name","readiness_pct":42,"sample_words":["word1","word2"]}, ...]`;
+[{"name":"Scenario Name","readiness_pct":42,"words":["你好","再见","谢谢"],"sample_words":["你好","再见"]}, ...]`;
 
 // ── Handler ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +118,7 @@ export async function POST(req: Request): Promise<Response> {
       .filter((s) => s.name && typeof s.readiness_pct === 'number' && Array.isArray(s.sample_words))
       .map((s) => ({
         ...s,
+        words: Array.isArray(s.words) ? s.words : s.sample_words,
         readiness_pct: Math.min(100, Math.max(0, s.readiness_pct)),
       }));
 
