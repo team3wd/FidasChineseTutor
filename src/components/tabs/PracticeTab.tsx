@@ -101,7 +101,7 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
     setPinyinInput('');
     setPinyinFeedback(null);
     setShowPinyinHint(false);
-    setTimeout(() => pinyinInputRef.current?.focus(), 50);
+    setTimeout(() => pinyinInputRef.current?.focus({ preventScroll: true }), 50);
   };
 
   // Normalise pinyin for comparison: strip tone marks, tone numbers, spaces, lowercase.

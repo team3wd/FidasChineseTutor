@@ -27,6 +27,7 @@ type Tab = 'lessons' | 'flashcards' | 'practice' | 'stats' | 'review';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('lessons');
+  const mainRef = useRef<HTMLElement>(null);
   const [pendingStore, setPendingStore] = useState<PendingStore>({});
   const [parsing, setParsing] = useState(false);
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -404,7 +405,7 @@ export default function Home() {
         </div>
       )}
 
-      <main style={{ flex: 1, padding: '16px 16px 80px 16px', overflowY: 'auto' }}>
+      <main ref={mainRef} style={{ flex: 1, padding: '16px 16px 80px 16px', overflowY: 'auto' }}>
         {activeTab === 'lessons' && (
           <LessonsTab lessons={lessons} vocabulary={vocabulary} speakHanzi={speakHanzi} />
         )}
@@ -441,7 +442,7 @@ export default function Home() {
         {tabNavItems.map(({ id, label, icon, badge }) => (
           <button
             key={id}
-            onClick={() => setActiveTab(id)}
+            onClick={() => { setActiveTab(id); mainRef.current?.scrollTo(0, 0); }}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
               fontSize: '10px', fontWeight: activeTab === id ? 600 : 500,
