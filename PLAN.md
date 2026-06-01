@@ -35,12 +35,12 @@ Goal: SRS progress survives clearing localStorage; works across devices.
 
 ---
 
-### M3 — Practice Tab
+### M3 — Practice Tab ✅ done
 Goal: active recall beyond flashcards.
 
-- [ ] Define and agree on practice modes before building (e.g. hanzi→translation, translation→hanzi, fill-in-pinyin)
-- [ ] Implement chosen mode(s)
-- [ ] Wire practice results into SRS (`calculateSRS`) same as flashcards
+- [x] Define and agree on practice modes — chosen: fill-in-pinyin (see hanzi, type the pinyin)
+- [x] Implement chosen mode (Game 3 in PracticeTab — accepts tone marks or tone numbers, spaces ignored)
+- [x] Wire practice results into SRS (`calculateSRS`) same as flashcards (correct = grade 4, wrong = grade 1)
 
 ---
 

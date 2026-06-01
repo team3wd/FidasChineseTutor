@@ -1,10 +1,11 @@
-// Practice tab — tone guessing and multiple choice vocabulary games
+// Practice tab — tone guessing, multiple choice, and fill-in-pinyin vocabulary games
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Check, X, AlertCircle } from 'lucide-react';
 import { VocabItem, Lesson, LocalStudyProgress } from '@/lib/types';
+import { calculateSRS, SRSState } from '@/lib/srs';
 
 interface Props {
   vocabulary: VocabItem[];
@@ -28,11 +29,17 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
   const [mcWord, setMcWord] = useState<VocabItem | null>(null);
   const [mcOptions, setMcOptions] = useState<string[]>([]);
   const [mcFeedback, setMcFeedback] = useState<{ isCorrect: boolean; selected: string } | null>(null);
+  const [pinyinWord, setPinyinWord] = useState<VocabItem | null>(null);
+  const [pinyinInput, setPinyinInput] = useState('');
+  const [pinyinFeedback, setPinyinFeedback] = useState<{ isCorrect: boolean } | null>(null);
+  const [showPinyinHint, setShowPinyinHint] = useState(false);
+  const pinyinInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (vocabulary.length > 0) {
       pickNewToneWord();
       pickNewMcWord();
+      pickNewPinyinWord();
     }
   }, []);
 
@@ -85,6 +92,60 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
       }
     }
     setMcFeedback({ isCorrect, selected: option });
+  };
+
+  const pickNewPinyinWord = () => {
+    if (vocabulary.length === 0) return;
+    setPinyinWord(vocabulary[Math.floor(Math.random() * vocabulary.length)]);
+    setPinyinInput('');
+    setPinyinFeedback(null);
+    setShowPinyinHint(false);
+    setTimeout(() => pinyinInputRef.current?.focus(), 50);
+  };
+
+  // Normalise pinyin for comparison: strip tone marks, tone numbers, spaces, lowercase.
+  // Accepts both "xuéxí" and "xue2xi2" as equivalent to "xuexi".
+  const normalizePinyin = (p: string): string =>
+    p.toLowerCase()
+      .replace(/[āáǎà]/g, 'a')
+      .replace(/[ēéěè]/g, 'e')
+      .replace(/[īíǐì]/g, 'i')
+      .replace(/[ōóǒò]/g, 'o')
+      .replace(/[ūúǔù]/g, 'u')
+      .replace(/[ǖǘǚǜü]/g, 'u')
+      .replace(/[1-5]/g, '')
+      .replace(/\s+/g, '');
+
+  const handlePinyinSubmit = () => {
+    if (!pinyinWord || pinyinFeedback || !pinyinInput.trim()) return;
+    const isCorrect = normalizePinyin(pinyinInput) === normalizePinyin(pinyinWord.pinyin);
+
+    // Wire into SM-2 SRS — correct = grade 4 (Good), wrong = grade 1 (Forgot)
+    const currentSRS: SRSState = studyProgress[pinyinWord.hanzi] || {
+      interval: 0, easeFactor: 2.5, repetitions: 0,
+    };
+    const nextSRS = calculateSRS(isCorrect ? 4 : 1, currentSRS);
+
+    const updatedProgress = { ...studyProgress };
+    updatedProgress[pinyinWord.hanzi] = {
+      interval: nextSRS.interval,
+      easeFactor: nextSRS.easeFactor,
+      repetitions: nextSRS.repetitions,
+      nextReview: nextSRS.nextReview.toISOString(),
+      status: nextSRS.status,
+      incorrect_count: (studyProgress[pinyinWord.hanzi]?.incorrect_count || 0) + (isCorrect ? 0 : 1),
+    };
+
+    // Record today for streak tracking (same as FlashcardsTab)
+    const studyDates: string[] = JSON.parse(localStorage.getItem('ch_study_dates') || '[]');
+    const todayStr = new Date().toDateString();
+    if (!studyDates.includes(todayStr)) {
+      studyDates.push(todayStr);
+      localStorage.setItem('ch_study_dates', JSON.stringify(studyDates));
+    }
+
+    onSave(lessons, vocabulary, updatedProgress, pinyinWord.hanzi);
+    setPinyinFeedback({ isCorrect });
   };
 
   if (vocabulary.length < 5) {
@@ -287,6 +348,123 @@ export default function PracticeTab({ vocabulary, lessons, studyProgress, onSave
               ) : (
                 <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                   Select the correct translation representing this Chinese character.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* GAME 3: FILL-IN PINYIN */}
+        <div style={{
+          padding: '20px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)',
+          backgroundColor: 'var(--bg-surface)', boxShadow: 'var(--shadow-sm)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+            <span style={{
+              padding: '4px 8px', borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--primary-subtle)', color: 'var(--primary)', fontSize: '11px', fontWeight: 600
+            }}>Game 3</span>
+            <h3 style={{ fontSize: '15px', fontWeight: 700 }}>Type the Pinyin</h3>
+          </div>
+
+          {pinyinWord && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '48px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                {pinyinWord.hanzi}
+              </div>
+
+              {/* Optional translation hint */}
+              {showPinyinHint ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', fontStyle: 'italic' }}>
+                  {pinyinWord.translation}
+                </p>
+              ) : (
+                <button
+                  onClick={() => setShowPinyinHint(true)}
+                  style={{
+                    fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px',
+                    textDecoration: 'underline', display: 'block', margin: '0 auto 16px auto'
+                  }}
+                >
+                  Show translation hint
+                </button>
+              )}
+
+              {/* Input row */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <input
+                  ref={pinyinInputRef}
+                  type="text"
+                  value={pinyinInput}
+                  onChange={e => setPinyinInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handlePinyinSubmit(); }}
+                  disabled={!!pinyinFeedback}
+                  placeholder="e.g. nǐ hǎo or ni3hao3"
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 'var(--radius-md)',
+                    border: `1px solid ${pinyinFeedback
+                      ? pinyinFeedback.isCorrect ? 'var(--success)' : 'var(--danger)'
+                      : 'var(--border)'}`,
+                    backgroundColor: pinyinFeedback
+                      ? pinyinFeedback.isCorrect ? 'var(--success-subtle)' : 'var(--danger-subtle)'
+                      : 'var(--bg-app)',
+                    fontSize: '15px', outline: 'none', textAlign: 'center',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                {!pinyinFeedback && (
+                  <button
+                    onClick={handlePinyinSubmit}
+                    disabled={!pinyinInput.trim()}
+                    className="tap-active"
+                    style={{
+                      padding: '10px 16px', borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--text-primary)', color: 'var(--bg-surface)',
+                      fontSize: '13px', fontWeight: 600,
+                      opacity: pinyinInput.trim() ? 1 : 0.4,
+                    }}
+                  >
+                    Check
+                  </button>
+                )}
+              </div>
+
+              {/* Feedback */}
+              {pinyinFeedback ? (
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    fontSize: '13px', fontWeight: 600,
+                    color: pinyinFeedback.isCorrect ? 'var(--success)' : 'var(--danger)'
+                  }}>
+                    {pinyinFeedback.isCorrect
+                      ? <><Check size={16} /> Correct! {pinyinWord.pinyin}</>
+                      : <><X size={16} /> Incorrect. Answer: {pinyinWord.pinyin}</>}
+                  </div>
+                  <button
+                    onClick={() => speakHanzi(pinyinWord.hanzi)}
+                    style={{
+                      fontSize: '11px', color: 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'underline'
+                    }}
+                  >
+                    <Volume2 size={12} /> Listen
+                  </button>
+                  <button
+                    onClick={pickNewPinyinWord}
+                    className="tap-active"
+                    style={{
+                      marginTop: '4px', padding: '8px 20px', borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--text-primary)', color: 'var(--bg-surface)',
+                      fontSize: '12px', fontWeight: 600
+                    }}
+                  >
+                    Next Word
+                  </button>
+                </div>
+              ) : (
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  Type with tone marks or numbers (nǐ or ni3). Spaces are ignored.
                 </p>
               )}
             </div>
